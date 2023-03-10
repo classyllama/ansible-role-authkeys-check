@@ -1,0 +1,33 @@
+---
+- name: AuthKeysCheck | Install dependencies
+  ansible.builtin.package:
+    name:
+      - coreutils # sha256sum
+      - diffutils # diff
+    state: present
+
+- name: AuthKeysCheck | Prepare working directory
+  ansible.builtin.file:
+    dest: "{{ classyllama_authkeys_install_path }}"
+    owner: "{{ classyllama_authkeys_user }}"
+    group: "{{ classyllama_authkeys_group }}"
+    mode: "750"
+    state: "directory"
+
+- name: AuthKeysCheck | Upload script
+  ansible.builtin.template:
+    src: "{{ item }}"
+    dest: "{{ classyllama_authkeys_install_path }}/{{ item }}"
+    owner: "{{ classyllama_authkeys_user }}"
+    group: "{{ classyllama_authkeys_group }}"
+    mode: 0750
+  with_items:
+    - check_authkeys.sh.j2
+
+- name: AuthKeysCheck | Adding cron entry 
+  ansible.builtin.cron:
+    name: "AuthKeysCheck"
+    minute: "05"
+    hour: "*"
+    job: "cd {{ classyllama_authkeys_install_path }}; bash check_authkeys.sh >> check_authkeys.log"
+    user: "{{ classyllama_authkeys_user }}"

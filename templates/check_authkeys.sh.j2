@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -eu
+
+KEYFILE="{{ classyllama_authkeys_keypath }}"
+CHECKSUMFILE='authorized_keys.sum'
+AUTHKEYSBACKUP='authorized_keys.bak'
+EMAIL="{{ classyllama_authkeys_notification_email }}"
+SUBJECT="{{ classyllama_authkeys_notification_subject }}"
+TEMPFILE="$(mktemp)"
+HEADER="Here are the changes in ${KEYFILE} on `hostname`:"
+TIMESTAMP=`date "+%Y-%m-%d %H:%M:%S"`
+
+trap 'rm -f ${TEMPFILE}' 0
+
+# first run - checksum file doesn't exist
+if [ !-f ${CHECKSUMFILE} ]; then
+
+  sha256sum ${KEYFILE} > ${CHECKSUMFILE}
+  cp ${KEYFILE} ${AUTHKEYSBACKUP}
+  exit 0
+
+else 
+# second and subsequent run
+  IS_CHANGED=$(sha256sum --quiet -c ${CHECKSUMFILE})
+
+  if [[ ${IS_CHANGED} != 0 ]]; then
+    echo ${HEADER} > ${TEMPFILE}
+    diff ${AUTHKEYSBACKUP} ${KEYFILE} >> ${TEMPFILE}
+    cat ${TEMPFILE} | mail -s ${SUBJECT} ${EMAIL}
+    
+    # to stdout - log message
+    echo ${TIMESTAMP} 
+    cat ${TEMPFILE}
+    echo 
+    rm ${TEMPFILE}
+    
+    # make a new checksum and copy for next checks
+    sha256sum ${KEYFILE} > ${CHECKSUMFILE}
+    cp ${KEYFILE} ${AUTHKEYSBACKUP}
+  fi
+  
+fi
