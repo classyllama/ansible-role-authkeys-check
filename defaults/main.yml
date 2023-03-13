@@ -2,6 +2,4 @@
 classyllama_authkeys_install_path: "/root/authkeyscheck"
 classyllama_authkeys_user: "root"
 classyllama_authkeys_group: "root"
-classyllama_authkeys_keypath: "/home/www-prod/.ssh/authorized_key"
 classyllama_authkeys_notification_email: "alert@example.org"
-classyllama_authkeys_notification_subject: "The {{ classyllama_authkeys_keypath }} was changed"

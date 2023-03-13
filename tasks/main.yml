@@ -1,12 +1,14 @@
 ---
-- name: AuthKeysCheck | Install dependencies
+- name: SSHKeysMonitoring | Install dependencies
   ansible.builtin.package:
     name:
       - coreutils # sha256sum
       - diffutils # diff
+      - gawk
+      - jq
     state: present
 
-- name: AuthKeysCheck | Prepare working directory
+- name: SSHKeysMonitoring | Prepare working directory
   ansible.builtin.file:
     dest: "{{ classyllama_authkeys_install_path }}"
     owner: "{{ classyllama_authkeys_user }}"
@@ -14,20 +16,26 @@
     mode: "750"
     state: "directory"
 
-- name: AuthKeysCheck | Upload script
+- name: SSHKeysMonitoring | Upload script
   ansible.builtin.template:
-    src: "{{ item }}"
-    dest: "{{ classyllama_authkeys_install_path }}/{{ item }}"
+    src: "ssh-keys-monitor.sh.j2"
+    dest: "{{ classyllama_authkeys_install_path }}/ssh-keys-monitor.sh"
     owner: "{{ classyllama_authkeys_user }}"
     group: "{{ classyllama_authkeys_group }}"
     mode: 0750
-  with_items:
-    - check_authkeys.sh.j2
 
-- name: AuthKeysCheck | Adding cron entry 
+- name: SSHKeysMonitoring | Upload config
+  ansible.builtin.copy:
+    src: "clients.json"
+    dest: "{{ classyllama_authkeys_install_path }}/clients.json"
+    owner: "{{ classyllama_authkeys_user }}"
+    group: "{{ classyllama_authkeys_group }}"
+    mode: 0640
+
+- name: SSHKeysMonitoring | Adding cron entry 
   ansible.builtin.cron:
-    name: "AuthKeysCheck"
+    name: "SSHKeysMonitoring"
     minute: "05"
     hour: "*"
-    job: "cd {{ classyllama_authkeys_install_path }}; bash check_authkeys.sh >> check_authkeys.log"
+    job: "cd {{ classyllama_authkeys_install_path }}; bash ssh-keys-monitor.sh >> ssh-keys-monitor.log"
     user: "{{ classyllama_authkeys_user }}"

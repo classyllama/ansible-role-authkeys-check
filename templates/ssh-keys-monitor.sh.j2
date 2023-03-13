@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+set -eu
+
+CHECKSUMFILE='authorized_keys.sum'
+AUTHKEYSBACKUP='authorized_keys.bak'
+EMAIL="{{ classyllama_authkeys_notification_email }}"
+REMOTE_KEYFILE="~/.ssh/authorized_keys"
+KEYFILE="authorized_keys"
+TEMPFILE="$(mktemp)"
+TIMESTAMP=`date "+%Y-%m-%d %H:%M:%S"`
+CONFIGFILE='clients.json'
+CLIENTCODE=$(hostname |awk -F'-' {' print $2 '} |awk -F'.' {' print $1 '})
+SUBJECT="The ${REMOTE_KEYFILE} file was changed on ${CLIENTCODE}"
+HEADER="Here are the changes in ${REMOTE_KEYFILE} on ${CLIENTCODE}:"
+PK="/root/pks/id_ed25519_${CLIENTCODE}_production"
+
+trap 'rm -f ${TEMPFILE}' 0
+
+if [ !-f ${CONFIGFILE} ]; then
+  echo "Config file isn't exists! Exiting.."
+  exit 1;
+fi
+
+if [ ${CLIENTCODE} == '' ]; then
+  echo "Can't determine client code! Exiting.."
+  exit 1;
+fi
+
+SCHECK_HOST=$(cat ${CONFIGFILE} |jq -r ".clients.${CLIENTCODE}" |jq -r '.NAME')
+SCHECK_USER=$(cat ${CONFIGFILE} |jq -r ".clients.${CLIENTCODE}" | jq -r '.USER')
+SCHECK_PORT=$(cat ${CONFIGFILE} |jq -r ".clients.${CLIENTCODE}" | jq -r '.PORT')
+
+if [ ${SCHECK_PORT} == '' ]; then
+  SCHECK_PORT="22"
+fi
+
+SSH_CMD="ssh ${SCHECK_USER}@${SCHECK_HOST} -p ${SCHECK_PORT} -i ${PK} "
+
+# first run - checksum file doesn't exist
+if [ !-f ${CHECKSUMFILE} ]; then
+
+  ${SSH_CMD} "cat ${REMOTE_KEYFILE}" > ${KEYFILE} 
+  sha256sum ${KEYFILE} > ${CHECKSUMFILE}
+  cp ${KEYFILE} ${AUTHKEYSBACKUP}
+  exit 0
+
+else 
+# second and subsequent run
+  ${SSH_CMD} "cat ${REMOTE_KEYFILE}" > ${KEYFILE} 
+  IS_CHANGED=$(sha256sum --quiet -c ${CHECKSUMFILE})
+
+  if [[ ${IS_CHANGED} != 0 ]]; then
+    echo ${HEADER} > ${TEMPFILE}
+    diff ${AUTHKEYSBACKUP} ${KEYFILE} >> ${TEMPFILE}
+    cat ${TEMPFILE} | mail -s ${SUBJECT} ${EMAIL}
+    
+    # to stdout - log message
+    echo ${TIMESTAMP} 
+    cat ${TEMPFILE}
+    echo 
+    rm ${TEMPFILE}
+    
+    # make a new checksum and copy for next checks
+    sha256sum ${KEYFILE} > ${CHECKSUMFILE}
+    cp ${KEYFILE} ${AUTHKEYSBACKUP}
+  fi
+  
+fi
